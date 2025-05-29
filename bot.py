@@ -65,12 +65,25 @@ def main():
                 "Basketball": BASEKTBALL_URL,
                 "Football": FOOTBALL_URL,
             }.items():
-                current_cards = set(get_current_cards(url))
-                new_cards = current_cards - seen_cards
+                current_cards = get_current_cards(url)
+                new_cards = []
+                split = None
+                for idx, card in enumerate(current_cards):
+                    if card in seen_cards:
+                        split = idx
+                        break
 
+                if split is None:
+                    new_slice = current_cards
+                else:
+                    new_slice = current_cards[:split]
+
+                for card in new_slice:
+                    if card not in seen_cards:
+                        new_cards.append(card)
+                        seen_cards.add(card)
                 if new_cards:
                     all_new_cards[category] = new_cards
-                    seen_cards.update(new_cards)
 
             if all_new_cards:
                 print(all_new_cards)
@@ -81,10 +94,10 @@ def main():
                         message_body += f"- {card}\n"
                     message_body += "\n"
 
-                send_email(
-                    subject='🃏 New Cards Posted on CardsHQ',
-                    body=message_body
-                )
+                # send_email(
+                #     subject='🃏 New Cards Posted on CardsHQ',
+                #     body=message_body
+                # )
                 print("Sent notification for new cards:\n", message_body)
 
                 save_seen_cards(seen_cards)
