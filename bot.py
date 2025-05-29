@@ -58,10 +58,19 @@ def get_current_cards(url):
     response = requests.get(url)
     soup = BeautifulSoup(response.text, 'html.parser')
     cards = soup.select('h2.line-clamp-3')
+    target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
+    matching_p_tags = [
+        p for p in soup.find_all('p')
+        if sorted(p.get('class', [])) == sorted(target_class)
+    ]
     c = []
-    for card in cards:
+    i = 0
+    while i < len(matching_p_tags):
+        card = cards[i]
         card = str(card)
-        c.append(card.split(">")[1].split("<")[0])
+        price = matching_p_tags[i]
+        c.append(card.split(">")[1].split("<")[0] + '\n Price:'+ str(price).split(">")[1].split("<")[0])
+        i+=1
     return c
 
 
