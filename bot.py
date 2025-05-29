@@ -37,9 +37,9 @@ EMAIL_RECEIVER = os.getenv('EMAIL_RECEIVER')
 SEEN_CARDS_FILE = 'seen_cards.json'
 
 
-BASEBALL_URL = 'https://www.cardshq.com/collections/baseball-cards?page=1'
-BASEKTBALL_URL = 'https://www.cardshq.com/collections/basketball-graded?page=1'
-FOOTBALL_URL = 'https://www.cardshq.com/collections/football-cards?page=1'
+BASEBALL_URL = 'https://www.cardshq.com/collections/baseball-cards?page=1&sort_by=created-descending'
+BASEKTBALL_URL = 'https://www.cardshq.com/collections/basketball-graded?page=1&sort_by=created-descending'
+FOOTBALL_URL = 'https://www.cardshq.com/collections/football-cards?page=1&sort_by=created-descending'
 CHECK_INTERVAL = 300  # 5 minutes
 
 
@@ -73,17 +73,18 @@ def main():
                     seen_cards.update(new_cards)
 
             if all_new_cards:
+                print(all_new_cards)
                 message_body = "New Cards Posted on CardsHQ \n\n"
                 for category, cards in all_new_cards.items():
                     message_body += f"📦 {category}:\n"
                     for card in cards:
                         message_body += f"- {card}\n"
                     message_body += "\n"
-
-                send_email(
-                    subject='🃏 New Cards Posted on CardsHQ',
-                    body=message_body
-                )
+                #
+                # send_email(
+                #     subject='🃏 New Cards Posted on CardsHQ',
+                #     body=message_body
+                # )
                 print("Sent notification for new cards:\n", message_body)
 
                 save_seen_cards(seen_cards)
