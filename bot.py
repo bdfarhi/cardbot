@@ -7,16 +7,29 @@ import json
 import os
 from dotenv import load_dotenv
 load_dotenv()
+EMAIL_SENDER= os.getenv('EMAIL_SENDER')
+EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
+EMAIL_RECEIVER = os.getenv('EMAIL_RECEIVER')
+NEW_EMAIL= os.getenv('NEW_EMAIL')
+
 
 def send_email(subject, body):
+    # build message
     msg = MIMEText(body)
     msg['Subject'] = subject
-    msg['From'] = EMAIL_SENDER
-    msg['To'] = EMAIL_RECEIVER
+    msg['From']    = EMAIL_SENDER
 
+    # send to both
+    recipients = [EMAIL_RECEIVER]
+    if NEW_EMAIL:
+        recipients.append(NEW_EMAIL)
+    msg['To'] = ", ".join(recipients)
+
+    # send
     with smtplib.SMTP_SSL('smtp.gmail.com', 465) as smtp:
         smtp.login(EMAIL_SENDER, EMAIL_PASSWORD)
-        smtp.send_message(msg)
+        smtp.send_message(msg, from_addr=EMAIL_SENDER, to_addrs=recipients)
+
 
 
 def load_seen_cards():
@@ -29,9 +42,7 @@ def save_seen_cards(seen_cards):
     with open(SEEN_CARDS_FILE, 'w') as f:
         json.dump(list(seen_cards), f)
 
-EMAIL_SENDER = os.getenv('EMAIL_SENDER')
-EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
-EMAIL_RECEIVER = os.getenv('EMAIL_RECEIVER')
+
 
 
 SEEN_CARDS_FILE = 'seen_cards.json'
