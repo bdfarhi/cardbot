@@ -11,6 +11,7 @@ EMAIL_SENDER= os.getenv('EMAIL_SENDER')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
 EMAIL_RECEIVER = os.getenv('EMAIL_RECEIVER')
 NEW_EMAIL= os.getenv('NEW_EMAIL')
+NEXT_EMAIL = os.getenv('NEXT_EMAIL')
 
 
 def send_email(subject, body):
@@ -23,6 +24,7 @@ def send_email(subject, body):
     recipients = [EMAIL_RECEIVER]
     if NEW_EMAIL:
         recipients.append(NEW_EMAIL)
+        recipients.append(NEXT_EMAIL)
     msg['To'] = ", ".join(recipients)
 
     # send
