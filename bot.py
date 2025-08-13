@@ -6,6 +6,8 @@ import time
 import json
 import os
 from dotenv import load_dotenv
+from lxml import etree
+import math
 load_dotenv()
 EMAIL_SENDER= os.getenv('EMAIL_SENDER')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
@@ -58,21 +60,47 @@ CHECK_INTERVAL = 300  # 5 minutes
 
 def get_current_cards(url):
     response = requests.get(url)
-    soup = BeautifulSoup(response.text, 'html.parser')
-    cards = soup.select('h2.line-clamp-3')
-    target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
-    matching_p_tags = [
-        p for p in soup.find_all('p')
-        if sorted(p.get('class', [])) == sorted(target_class)
-    ]
+    html_content = response.text
+
+    # Step 2: Parse with BeautifulSoup and lxml
+    soup = BeautifulSoup(html_content, 'lxml')
+
+    # Step 3: Convert BeautifulSoup to an lxml etree element
+    dom = etree.HTML(str(soup))
+
+    # Step 4: Use XPath to get the element
+    xpath = '/html/body/div/main/div[1]/div/div/div[1]/div[2]/div[2]'
+    elements = dom.xpath(xpath)
+
+    # Step 5: Safely get and print text from element
+    text = ''.join(elements[0].itertext()).strip()
+    text = text.split()
+    products = int(text[0])
+    print(products)
+    page = 1
     c = []
-    i = 0
-    while i < len(matching_p_tags):
-        card = cards[i]
-        card = str(card)
-        price = matching_p_tags[i]
-        c.append(card.split(">")[1].split("<")[0] + '\n Price:'+ str(price).split(">")[1].split("<")[0])
-        i+=1
+    pageNumbers = math.ceil(products / 36)
+    while page <= pageNumbers:
+        # print(BASEBALL_URL)
+
+        response = requests.get(url)
+        soup = BeautifulSoup(response.text, 'html.parser')
+
+        cards = soup.select('h2.line-clamp-3')
+        target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
+        matching_p_tags = [
+            p for p in soup.find_all('p')
+            if sorted(p.get('class', [])) == sorted(target_class)
+        ]
+        i = 0
+        while i < len(matching_p_tags):
+            card = cards[i]
+            card = str(card)
+            price = matching_p_tags[i]
+            c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
+            i += 1
+        url = url.replace(str(page), str(page + 1))
+        page += 1
     return c
 
 
@@ -89,21 +117,11 @@ def main():
             }.items():
                 current_cards = get_current_cards(url)
                 new_cards = []
-                split = None
-                for idx, card in enumerate(current_cards):
-                    if card in seen_cards:
-                        split = idx
-                        break
-
-                if split is None:
-                    new_slice = current_cards
-                else:
-                    new_slice = current_cards[:split]
-
-                for card in new_slice:
+                for card in current_cards:
                     if card not in seen_cards:
                         new_cards.append(card)
                         seen_cards.add(card)
+
                 if new_cards:
                     all_new_cards[category] = new_cards
 
