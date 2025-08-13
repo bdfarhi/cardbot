@@ -82,17 +82,16 @@ def get_current_cards(url):
     response = requests.get(url)
     html_content = response.text
 
-    # Step 2: Parse with BeautifulSoup and lxml
     soup = BeautifulSoup(html_content, 'lxml')
 
-    # Step 3: Convert BeautifulSoup to an lxml etree element
+
     dom = etree.HTML(str(soup))
 
-    # Step 4: Use XPath to get the element
+
     xpath = '/html/body/div/main/div[1]/div/div/div[1]/div[2]/div[2]'
     elements = dom.xpath(xpath)
 
-    # Step 5: Safely get and print text from element
+
     text = ''.join(elements[0].itertext()).strip()
     text = text.split()
     products = int(text[0])
@@ -162,10 +161,10 @@ def main():
                         message_body += f"- {card}\n"
                     message_body += "\n"
 
-                # send_email(
-                #     subject='🃏 New Cards Posted on CardsHQ',
-                #     body=message_body
-                # )
+                send_email(
+                    subject='🃏 New Cards Posted on CardsHQ',
+                    body=message_body
+                )
                 print("Sent notification for new cards:\n", message_body)
             else:
                 print("No new cards found.")
@@ -174,42 +173,7 @@ def main():
             save_set(prev_inventory, INVENTORY_PREV2_FILE)
                 # Last cycle <= current snapshot
             save_set(current_inventory, INVENTORY_PREV_FILE)
-        # try:
-        #     all_new_cards = {}
-        #     for category, url in {
-        #         "Baseball": BASEBALL_URL,
-        #         "Basketball": BASKETBALL_URL,
-        #         "Football": FOOTBALL_URL,
-        #     }.items():
-        #         current_cards = get_current_cards(url)
-        #         new_cards = []
-        #         for card in current_cards:
-        #             if card not in seen_cards:
-        #                 new_cards.append(card)
-        #                 seen_cards.add(card)
-        #
-        #         if new_cards:
-        #             all_new_cards[category] = new_cards
-        #
-        #     if all_new_cards:
-        #         print(all_new_cards)
-        #         message_body = "New Cards Posted on CardsHQ \n\n"
-        #         for category, cards in all_new_cards.items():
-        #             message_body += f"📦 {category}:\n"
-        #             for card in cards:
-        #                 message_body += f"- {card}\n"
-        #             message_body += "\n"
-        #
-        #         send_email(
-        #             subject='🃏 New Cards Posted on CardsHQ',
-        #             body=message_body
-        #         )
-        #         print("Sent notification for new cards:\n", message_body)
-        #
-        #         save_seen_cards(seen_cards)
-        #     else:
-        #         print("No new cards found.")
-        #
+
         except Exception as e:
             print(f"Error during check: {e}")
 
