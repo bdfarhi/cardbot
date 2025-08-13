@@ -55,7 +55,7 @@ SEEN_CARDS_FILE = 'seen_cards.json'
 BASEBALL_URL = 'https://www.cardshq.com/collections/baseball-cards?page=1&sort_by=created-descending'
 BASEKTBALL_URL = 'https://www.cardshq.com/collections/basketball-graded?page=1&sort_by=created-descending'
 FOOTBALL_URL = 'https://www.cardshq.com/collections/football-cards?page=1&sort_by=created-descending'
-CHECK_INTERVAL = 300  # 5 minutes
+CHECK_INTERVAL = 180  # 3 minutes
 
 
 def get_current_cards(url):
