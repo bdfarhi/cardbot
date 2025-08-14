@@ -125,10 +125,11 @@ def get_current_cards(url):
 
 def main():
     # seen_cards = load_seen_cards()
-    prev_inventory = load_set(INVENTORY_PREV_FILE)  # last cycle
-    prev2_inventory = load_set(INVENTORY_PREV2_FILE)  # two cycles ago
+
     while True:
         try:
+            prev_inventory = load_set(INVENTORY_PREV_FILE)  # last cycle
+            prev2_inventory = load_set(INVENTORY_PREV2_FILE)  # two cycles ago
             categories = {
                 'Baseball' : BASEBALL_URL,
                 "Basketball" : BASKETBALL_URL,
@@ -152,7 +153,7 @@ def main():
                 if cat_adds:
                     all_additions[cat] = sorted(cat_adds)
 
-            if len(all_additions['Baseball']) > 0 or len(all_additions['Basketball']) > 0 or len(all_additions['Football']) > 0:
+            if all_additions:
                 # print(all_additions)
                 message_body = "New Cards Posted on CardsHQ \n\n"
                 for category, cards in all_additions.items():
@@ -161,10 +162,10 @@ def main():
                         message_body += f"- {card}\n"
                     message_body += "\n"
                 #
-                # send_email(
-                #     subject='🃏 New Cards Posted on CardsHQ',
-                #     body=message_body
-                # )
+                send_email(
+                    subject='🃏 New Cards Posted on CardsHQ',
+                    body=message_body
+                )
                 print("Sent notification for new cards:\n", message_body)
             else:
                 print("No new cards found.")
