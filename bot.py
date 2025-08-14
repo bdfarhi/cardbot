@@ -152,7 +152,7 @@ def main():
                 if cat_adds:
                     all_additions[cat] = sorted(cat_adds)
 
-            if len(all_additions[BASEBALL_URL]) > 0 or len(all_additions[BASKETBALL_URL]) > 0 or len(all_additions[FOOTBALL_URL]) > 0:
+            if len(all_additions['Baseball']) > 0 or len(all_additions['Basketball']) > 0 or len(all_additions['Football']) > 0:
                 # print(all_additions)
                 message_body = "New Cards Posted on CardsHQ \n\n"
                 for category, cards in all_additions.items():
@@ -160,11 +160,11 @@ def main():
                     for card in cards:
                         message_body += f"- {card}\n"
                     message_body += "\n"
-
-                send_email(
-                    subject='🃏 New Cards Posted on CardsHQ',
-                    body=message_body
-                )
+                #
+                # send_email(
+                #     subject='🃏 New Cards Posted on CardsHQ',
+                #     body=message_body
+                # )
                 print("Sent notification for new cards:\n", message_body)
             else:
                 print("No new cards found.")
