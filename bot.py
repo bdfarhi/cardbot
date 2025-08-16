@@ -126,10 +126,11 @@ def get_current_cards(url):
 
 def main():
     # seen_cards = load_seen_cards()
-    prev_inventory = load_set(INVENTORY_PREV_FILE)  # last cycle
-    prev2_inventory = load_set(INVENTORY_PREV2_FILE)  # two cycles ago
+
     while True:
         try:
+            prev_inventory = load_set(INVENTORY_PREV_FILE)  # last cycle
+            prev2_inventory = load_set(INVENTORY_PREV2_FILE)  # two cycles ago
             categories = {
                 'Baseball' : BASEBALL_URL,
                 "Basketball" : BASKETBALL_URL,
