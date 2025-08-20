@@ -76,7 +76,7 @@ INVENTORY_PREV2_FILE = 'inventory_prev2.json'  # snapshot from two cycles ago
 BASEBALL_URL = 'https://www.cardshq.com/collections/baseball-cards?page=1&sort_by=created-descending'
 BASKETBALL_URL = 'https://www.cardshq.com/collections/basketball-graded?page=1&sort_by=created-descending'
 FOOTBALL_URL = 'https://www.cardshq.com/collections/football-cards?page=1&sort_by=created-descending'
-CHECK_INTERVAL = 180  # 3 minutes
+CHECK_INTERVAL = 60  # 1 minutes
 
 
 def get_current_cards(url):
