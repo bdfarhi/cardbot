@@ -110,7 +110,7 @@ CHECK_INTERVAL = 90  # 1 minutes
 #     if not prices:
 #         return "N/A"
 #     return f"${min(prices):.2f}"
-    end of added Functions
+    # end of added Functions
 
 def get_current_cards(url):
     response = requests.get(url)
