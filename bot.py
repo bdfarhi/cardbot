@@ -77,6 +77,7 @@ INVENTORY_PREV2_FILE = 'inventory_prev2.json'  # snapshot from two cycles ago
 BASEBALL_URL = 'https://www.cardshq.com/collections/baseball-cards?page=1&sort_by=created-descending'
 BASKETBALL_URL = 'https://www.cardshq.com/collections/basketball-graded?page=1&sort_by=created-descending'
 FOOTBALL_URL = 'https://www.cardshq.com/collections/football-cards?page=1&sort_by=created-descending'
+POKEMON_URL = 'https://www.cardshq.com/collections/pokemon-cards?page=1&sort_by=created-descending'
 CHECK_INTERVAL = 90  # 1 minutes
 
 # #start of added
@@ -211,6 +212,7 @@ def main():
                 'Baseball' : BASEBALL_URL,
                 "Basketball" : BASKETBALL_URL,
                 "Football" :FOOTBALL_URL,
+                "Pokemon" : POKEMON_URL,
             }
             all_additions = {}
             current_inventory = set()
@@ -230,7 +232,8 @@ def main():
                 if cat_adds:
                     all_additions[cat] = sorted(cat_adds)
 
-            if len(all_additions['Baseball']) > 0 or len(all_additions['Basketball']) > 0 or len(all_additions['Football']) > 0:
+            # if len(all_additions['Baseball']) > 0 or len(all_additions['Basketball']) > 0 or len(all_additions['Football']) > 0 or len(add_additions[:
+            if any(len(cards) > 0 for cards in all_additions.values()):
                 # print(all_additions)
                 message_body = "New Cards Posted on CardsHQ \n\n"
                 for category, cards in all_additions.items():
