@@ -97,31 +97,68 @@ def get_driver():
     options.binary_location = "/usr/bin/chromium"
     return webdriver.Chrome(options=options)
 
-def get_current_cards(url):
+def get_current_cards(base_url):
     driver = get_driver()
+    c = []
+    page = 1
+    
     try:
-        driver.get(url)
-        # Wait until cards are actually loaded
-        WebDriverWait(driver, 10).until(
-            EC.presence_of_element_located((By.CSS_SELECTOR, 'h2.line-clamp-3'))
-        )
-        soup = BeautifulSoup(driver.page_source, 'lxml')
+        while True:
+            url = _set_url_page(base_url, page)
+            driver.get(url)
+            try:
+                WebDriverWait(driver, 10).until(
+                    EC.presence_of_element_located((By.CSS_SELECTOR, 'h2.line-clamp-3'))
+                )
+            except:
+                break  # no more pages
+
+            soup = BeautifulSoup(driver.page_source, 'lxml')
+            cards = soup.select('h2.line-clamp-3')
+            target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
+            matching_p_tags = [
+                p for p in soup.find_all('p')
+                if sorted(p.get('class', [])) == sorted(target_class)
+            ]
+
+            if not matching_p_tags:
+                break  # no cards found, done paginating
+
+            for i in range(len(matching_p_tags)):
+                card = str(cards[i])
+                price = matching_p_tags[i]
+                c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
+
+            page += 1
     finally:
         driver.quit()
 
-    # rest of your existing parsing logic unchanged
-    cards = soup.select('h2.line-clamp-3')
-    target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
-    matching_p_tags = [
-        p for p in soup.find_all('p')
-        if sorted(p.get('class', [])) == sorted(target_class)
-    ]
-    c = []
-    for i in range(len(matching_p_tags)):
-        card = str(cards[i])
-        price = matching_p_tags[i]
-        c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
     return c
+# def get_current_cards(url):
+#     driver = get_driver()
+#     try:
+#         driver.get(url)
+#         # Wait until cards are actually loaded
+#         WebDriverWait(driver, 10).until(
+#             EC.presence_of_element_located((By.CSS_SELECTOR, 'h2.line-clamp-3'))
+#         )
+#         soup = BeautifulSoup(driver.page_source, 'lxml')
+#     finally:
+#         driver.quit()
+
+#     # rest of your existing parsing logic unchanged
+#     cards = soup.select('h2.line-clamp-3')
+#     target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
+#     matching_p_tags = [
+#         p for p in soup.find_all('p')
+#         if sorted(p.get('class', [])) == sorted(target_class)
+#     ]
+#     c = []
+#     for i in range(len(matching_p_tags)):
+#         card = str(cards[i])
+#         price = matching_p_tags[i]
+#         c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
+#     return c
 # def get_current_cards(url):
 #     response = requests.get(url)
 #     html_content = response.text
