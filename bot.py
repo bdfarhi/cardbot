@@ -95,8 +95,7 @@ def get_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
     options.binary_location = "/usr/bin/chromium"
-    service = Service("/usr/bin/chromedriver")
-    return webdriver.Chrome(service=service, options=options)
+    return webdriver.Chrome(options=options)
 
 def get_current_cards(url):
     driver = get_driver()
