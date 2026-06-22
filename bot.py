@@ -1,3 +1,6 @@
+import subprocess
+subprocess.run(["python", "-m", "playwright", "install", "chromium"], check=True)
+subprocess.run(["python", "-m", "playwright", "install-deps", "chromium"], check=True)
 import requests
 from bs4 import BeautifulSoup
 import smtplib
