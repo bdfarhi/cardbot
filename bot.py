@@ -96,22 +96,27 @@ def get_driver():
     options.add_argument('--disable-gpu')
     options.binary_location = "/usr/bin/chromium"
     return webdriver.Chrome(options=options)
-
 def get_current_cards(base_url):
+    print(f"Starting scrape for {base_url}")
     driver = get_driver()
+    print("Driver created")
     c = []
     page = 1
     
     try:
         while True:
             url = _set_url_page(base_url, page)
+            print(f"Loading page {page}: {url}")
             driver.get(url)
+            print(f"Page loaded, waiting for cards...")
             try:
                 WebDriverWait(driver, 10).until(
                     EC.presence_of_element_located((By.CSS_SELECTOR, 'h2.line-clamp-3'))
                 )
+                print(f"Cards found on page {page}")
             except:
-                break  # no more pages
+                print(f"No cards found on page {page}, stopping")
+                break
 
             soup = BeautifulSoup(driver.page_source, 'lxml')
             cards = soup.select('h2.line-clamp-3')
@@ -122,8 +127,10 @@ def get_current_cards(base_url):
             ]
 
             if not matching_p_tags:
-                break  # no cards found, done paginating
+                print(f"No price tags found on page {page}, stopping")
+                break
 
+            print(f"Found {len(matching_p_tags)} cards on page {page}")
             for i in range(len(matching_p_tags)):
                 card = str(cards[i])
                 price = matching_p_tags[i]
@@ -133,6 +140,7 @@ def get_current_cards(base_url):
     finally:
         driver.quit()
 
+    print(f"Scrape complete, {len(c)} total cards found")
     return c
 # def get_current_cards(url):
 #     driver = get_driver()
