@@ -215,8 +215,9 @@ def get_current_cards(base_url):
 
 def main():
     # seen_cards = load_seen_cards()
-
+    print("Bot started")
     while True:
+        print("Starting check cycle")
         try:
             prev_inventory = load_set(INVENTORY_PREV_FILE)  # last cycle
             prev2_inventory = load_set(INVENTORY_PREV2_FILE)  # two cycles ago
