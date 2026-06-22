@@ -10,6 +10,14 @@ from dotenv import load_dotenv
 from lxml import etree
 import math
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.common.by import By
+from selenium.webdriver.support.ui import WebDriverWait
+from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
+from selenium.webdriver.chrome.service import Service
+
 load_dotenv()
 EMAIL_SENDER= os.getenv('EMAIL_SENDER')
 EMAIL_PASSWORD = os.getenv('EMAIL_PASSWORD')
@@ -80,124 +88,81 @@ FOOTBALL_URL = 'https://www.cardshq.com/collections/football-cards?page=1&sort_b
 POKEMON_URL = 'https://www.cardshq.com/collections/pokemon-cards?page=1&sort_by=created-descending'
 CHECK_INTERVAL = 90  # 1 minutes
 
-# #start of added
-# _SESSION = requests.Session()
-# _DEFAULT_TIMEOUT = 15
-
-# def _collection_handle_from_url(collection_url: str) -> str:
-#     path = urlparse(collection_url).path  # e.g., /collections/baseball-cards
-#     segs = [s for s in path.strip("/").split("/") if s]
-#     try:
-#         idx = segs.index("collections")
-#         return segs[idx + 1]
-#     except (ValueError, IndexError):
-#         return segs[-1] if segs else ""
-
-# def _get_sort_query(collection_url: str) -> str | None:
-#     q = parse_qs(urlparse(collection_url).query)
-#     vals = q.get("sort_by")
-#     return vals[0] if vals else None
-
-# def _format_min_price(variants: list[dict]) -> str:
-#     prices = []
-#     for v in variants or []:
-#         p = v.get("price")
-#         if p is None:
-#             continue
-#         try:
-#             prices.append(float(p))
-#         except (TypeError, ValueError):
-#             continue
-#     if not prices:
-#         return "N/A"
-#     return f"${min(prices):.2f}"
-    # end of added Functions
+def get_driver():
+    options = Options()
+    options.add_argument('--headless')
+    options.add_argument('--no-sandbox')
+    options.add_argument('--disable-dev-shm-usage')
+    return webdriver.Chrome(service=Service(ChromeDriverManager().install()), options=options)
 
 def get_current_cards(url):
-    response = requests.get(url)
-    html_content = response.text
+    driver = get_driver()
+    try:
+        driver.get(url)
+        # Wait until cards are actually loaded
+        WebDriverWait(driver, 10).until(
+            EC.presence_of_element_located((By.CSS_SELECTOR, 'h2.line-clamp-3'))
+        )
+        soup = BeautifulSoup(driver.page_source, 'lxml')
+    finally:
+        driver.quit()
 
-    soup = BeautifulSoup(html_content, 'lxml')
-
-
-    dom = etree.HTML(str(soup))
-
-
-    xpath = '/html/body/div/main/div[1]/div/div/div[1]/div[2]/div[2]'
-    elements = dom.xpath(xpath)
-
-
-    text = ''.join(elements[0].itertext()).strip()
-    text = text.split()
-    products = int(text[0])
-    print(products)
-    page = 1
+    # rest of your existing parsing logic unchanged
+    cards = soup.select('h2.line-clamp-3')
+    target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
+    matching_p_tags = [
+        p for p in soup.find_all('p')
+        if sorted(p.get('class', [])) == sorted(target_class)
+    ]
     c = []
-    pageNumbers = math.ceil(products / 36)
-    while page <= pageNumbers:
-        # print(BASEBALL_URL)
-
-        response = requests.get(url)
-        soup = BeautifulSoup(response.text, 'html.parser')
-
-        cards = soup.select('h2.line-clamp-3')
-        target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
-        matching_p_tags = [
-            p for p in soup.find_all('p')
-            if sorted(p.get('class', [])) == sorted(target_class)
-        ]
-        i = 0
-        while i < len(matching_p_tags):
-            card = cards[i]
-            card = str(card)
-            price = matching_p_tags[i]
-            c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
-            i += 1
-        url = url.replace(str(page), str(page + 1))
-        page += 1
+    for i in range(len(matching_p_tags)):
+        card = str(cards[i])
+        price = matching_p_tags[i]
+        c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
     return c
-# def get_current_cards(collection_url: str) -> list[str]:
-#     handle = _collection_handle_from_url(collection_url)
-#     if not handle:
-#         return []
+# def get_current_cards(url):
+#     response = requests.get(url)
+#     html_content = response.text
 
-#     sort_by = _get_sort_query(collection_url)
-#     page   = 1
-#     limit  = 250
-#     results = []
-#     seen_lines = set()
+#     soup = BeautifulSoup(html_content, 'lxml')
 
-#     while True:
-#         params = {"limit": limit, "page": page}
-#         if sort_by:
-#             params["sort_by"] = sort_by
 
-#         api = f"https://www.cardshq.com/collections/{handle}/products.json"
-#         r = _SESSION.get(api, params=params, timeout=_DEFAULT_TIMEOUT)
-#         r.raise_for_status()
+#     dom = etree.HTML(str(soup))
 
-#         data = r.json() or {}
-#         products = data.get("products", [])
-#         if not products:
-#             break
 
-#         for p in products:
-#             title = (p.get("title") or "").strip()
-#             price_text = _format_min_price(p.get("variants", []))
-#             product_handle = p.get("handle")
-#             link = f"https://www.cardshq.com/products/{product_handle}" if product_handle else "N/A"
+#     xpath = '/html/body/div/main/div[1]/div/div/div[1]/div[2]/div[2]'
+#     elements = dom.xpath(xpath)
 
-#             line = f"{title}\n Price:{price_text}\n Link:{link}"
-#             if line not in seen_lines:
-#                 seen_lines.add(line)
-#                 results.append(line)
 
-#         if len(products) < limit:
-#             break
+#     text = ''.join(elements[0].itertext()).strip()
+#     text = text.split()
+#     products = int(text[0])
+#     print(products)
+#     page = 1
+#     c = []
+#     pageNumbers = math.ceil(products / 36)
+#     while page <= pageNumbers:
+#         # print(BASEBALL_URL)
+
+#         response = requests.get(url)
+#         soup = BeautifulSoup(response.text, 'html.parser')
+
+#         cards = soup.select('h2.line-clamp-3')
+#         target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
+#         matching_p_tags = [
+#             p for p in soup.find_all('p')
+#             if sorted(p.get('class', [])) == sorted(target_class)
+#         ]
+#         i = 0
+#         while i < len(matching_p_tags):
+#             card = cards[i]
+#             card = str(card)
+#             price = matching_p_tags[i]
+#             c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
+#             i += 1
+#         url = url.replace(str(page), str(page + 1))
 #         page += 1
-
-#     return results
-
+#     return c
 
 
 
