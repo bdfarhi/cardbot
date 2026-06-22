@@ -95,7 +95,9 @@ def get_driver():
     options.add_argument('--disable-dev-shm-usage')
     options.add_argument('--disable-gpu')
     options.binary_location = "/usr/bin/chromium"
-    return webdriver.Chrome(options=options)
+    service = Service("/usr/bin/chromedriver")
+    return webdriver.Chrome(service=service, options=options)
+    
 def get_current_cards(base_url):
     print(f"Starting scrape for {base_url}")
     driver = get_driver()
