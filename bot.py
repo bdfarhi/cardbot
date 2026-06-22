@@ -10,13 +10,7 @@ from dotenv import load_dotenv
 from lxml import etree
 import math
 from urllib.parse import urlparse, parse_qs, urlencode, urlunparse
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from selenium.webdriver.common.by import By
-from selenium.webdriver.support.ui import WebDriverWait
-from selenium.webdriver.support import expected_conditions as EC
-from webdriver_manager.chrome import ChromeDriverManager
-from selenium.webdriver.chrome.service import Service
+from playwright.sync_api import sync_playwright
 
 load_dotenv()
 EMAIL_SENDER= os.getenv('EMAIL_SENDER')
@@ -88,59 +82,59 @@ FOOTBALL_URL = 'https://www.cardshq.com/collections/football-cards?page=1&sort_b
 POKEMON_URL = 'https://www.cardshq.com/collections/pokemon-cards?page=1&sort_by=created-descending'
 CHECK_INTERVAL = 90  # 1 minutes
 
-def get_driver():
-    options = Options()
-    options.add_argument('--headless')
-    options.add_argument('--no-sandbox')
-    options.add_argument('--disable-dev-shm-usage')
-    options.add_argument('--disable-gpu')
-    options.binary_location = "/usr/bin/chromium"
-    service = Service("/usr/bin/chromedriver")
-    return webdriver.Chrome(service=service, options=options)
+# def get_driver():
+#     options = Options()
+#     options.add_argument('--headless')
+#     options.add_argument('--no-sandbox')
+#     options.add_argument('--disable-dev-shm-usage')
+#     options.add_argument('--disable-gpu')
+#     options.binary_location = "/usr/bin/chromium"
+#     service = Service("/usr/bin/chromedriver")
+#     return webdriver.Chrome(service=service, options=options)
     
 def get_current_cards(base_url):
     print(f"Starting scrape for {base_url}")
-    driver = get_driver()
-    print("Driver created")
     c = []
     page = 1
-    
-    try:
-        while True:
-            url = _set_url_page(base_url, page)
-            print(f"Loading page {page}: {url}")
-            driver.get(url)
-            print(f"Page loaded, waiting for cards...")
-            try:
-                WebDriverWait(driver, 10).until(
-                    EC.presence_of_element_located((By.CSS_SELECTOR, 'h2.line-clamp-3'))
-                )
-                print(f"Cards found on page {page}")
-            except:
-                print(f"No cards found on page {page}, stopping")
-                break
 
-            soup = BeautifulSoup(driver.page_source, 'lxml')
-            cards = soup.select('h2.line-clamp-3')
-            target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
-            matching_p_tags = [
-                p for p in soup.find_all('p')
-                if sorted(p.get('class', [])) == sorted(target_class)
-            ]
+    with sync_playwright() as p:
+        browser = p.chromium.launch(headless=True)
+        context = browser.new_context()
+        tab = context.new_page()
 
-            if not matching_p_tags:
-                print(f"No price tags found on page {page}, stopping")
-                break
+        try:
+            while True:
+                url = _set_url_page(base_url, page)
+                print(f"Loading page {page}: {url}")
+                tab.goto(url)
+                try:
+                    tab.wait_for_selector('h2.line-clamp-3', timeout=10000)
+                    print(f"Cards found on page {page}")
+                except:
+                    print(f"No cards on page {page}, stopping")
+                    break
 
-            print(f"Found {len(matching_p_tags)} cards on page {page}")
-            for i in range(len(matching_p_tags)):
-                card = str(cards[i])
-                price = matching_p_tags[i]
-                c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
+                soup = BeautifulSoup(tab.content(), 'lxml')
+                cards = soup.select('h2.line-clamp-3')
+                target_class = ['text-lg', 'font-bold', 'text-gray-700', 'md:text-base']
+                matching_p_tags = [
+                    p for p in soup.find_all('p')
+                    if sorted(p.get('class', [])) == sorted(target_class)
+                ]
 
-            page += 1
-    finally:
-        driver.quit()
+                if not matching_p_tags:
+                    print(f"No prices on page {page}, stopping")
+                    break
+
+                print(f"Found {len(matching_p_tags)} cards on page {page}")
+                for i in range(len(matching_p_tags)):
+                    card = str(cards[i])
+                    price = matching_p_tags[i]
+                    c.append(card.split(">")[1].split("<")[0] + '\n Price:' + str(price).split(">")[1].split("<")[0])
+
+                page += 1
+        finally:
+            browser.close()
 
     print(f"Scrape complete, {len(c)} total cards found")
     return c
