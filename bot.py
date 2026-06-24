@@ -229,10 +229,10 @@ def main():
                         message_body += f"- {card}\n"
                     message_body += "\n"
 
-                send_email(
-                    subject='🃏 New Cards Posted on CardsHQ',
-                    body=message_body
-                )
+                # send_email(
+                #     subject='🃏 New Cards Posted on CardsHQ',
+                #     body=message_body
+                # )
                 print("Sent notification for new cards:\n", message_body)
             else:
                 print("No new cards found.")
