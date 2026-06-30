@@ -20,6 +20,10 @@ NEXT_EMAIL2    = os.getenv('NEXT_EMAIL2')
 
 SNAPSHOT_FILE  = 'inventory_snapshot.json'
 LOOP_PAUSE     = 10  # short pause between full cycles, in seconds
+MISS_THRESHOLD = 3   # a card must be absent this many CONSECUTIVE cycles
+                      # before it's treated as sold/removed. This absorbs
+                      # one-off scraping misses (slow page, missed click,
+                      # network hiccup) without ever-growing the snapshot.
 
 CATEGORIES = {
     'Baseball':   'https://www.cardshq.com/collections/baseball-cards?sort_by=created-descending',
@@ -45,6 +49,10 @@ def send_email(subject, body):
 
 
 # ── persistence ──────────────────────────────────────────────────────────────
+# Snapshot format on disk: { category: { card_key: miss_count } }
+# miss_count = 0 means "seen in the most recent scrape".
+# miss_count > 0 means "missing for this many consecutive cycles in a row".
+# A card is only actually dropped once miss_count reaches MISS_THRESHOLD.
 
 def load_snapshot() -> dict:
     if not os.path.exists(SNAPSHOT_FILE):
@@ -52,25 +60,34 @@ def load_snapshot() -> dict:
     try:
         with open(SNAPSHOT_FILE, 'r', encoding='utf-8') as f:
             raw = json.load(f)
-        return {cat: set(cards) for cat, cards in raw.items()}
+        # Backward compatible with old format (plain list of cards)
+        out = {}
+        for cat, val in raw.items():
+            if isinstance(val, list):
+                out[cat] = {card: 0 for card in val}
+            else:
+                out[cat] = val
+        return out
     except Exception as e:
         print(f"[WARN] Could not load snapshot ({e}), treating as first run.")
         return {}
 
 def save_snapshot(snapshot: dict):
-    serialisable = {cat: sorted(list(cards)) for cat, cards in snapshot.items()}
     with open(SNAPSHOT_FILE, 'w', encoding='utf-8') as f:
-        json.dump(serialisable, f, ensure_ascii=False, indent=2)
-    print(f"  [snapshot saved: {sum(len(v) for v in snapshot.values())} total cards]")
+        json.dump(snapshot, f, ensure_ascii=False, indent=2)
+    total = sum(len(v) for v in snapshot.values())
+    print(f"  [snapshot saved: {total} tracked cards across all categories]")
 
 
-# ── scraping via "Load more" button clicks ───────────────────────────────────
+# ── scraping ──────────────────────────────────────────────────────────────────
 
 def scrape_category(url: str) -> set:
     """
-    Loads the page, then repeatedly clicks the "Load more" button until it
-    disappears or becomes disabled. This is deterministic — no scroll
-    position guessing, no virtual-scroll flicker.
+    Loads the page, clicks 'Load more' (waiting out the disabled/loading
+    state rather than giving up on it) until no more cards appear, then
+    extracts each card's title+price from WITHIN its own product link —
+    never from two separately-queried lists matched by position. This is
+    what prevents a card from being paired with the wrong price.
     """
     print(f"  Scraping: {url}")
     cards = set()
@@ -82,16 +99,10 @@ def scrape_category(url: str) -> set:
             tab.goto(url, wait_until='networkidle', timeout=30_000)
             tab.wait_for_selector('h2.line-clamp-3', timeout=15_000)
 
-            # Repeatedly try to grow the card count, either by clicking
-            # "Load more" or by letting scroll-triggered loads happen on
-            # their own. The page sometimes loads more cards from scrolling
-            # alone, which can make a queued click land on a stale/removed
-            # button — so we re-locate the button fresh every iteration and
-            # tolerate click failures rather than treating them as fatal.
-            click_count   = 0
-            max_attempts  = 300   # safety cap on iterations, not just clicks
-            no_growth_streak = 0
-            max_no_growth = 4     # stop after this many attempts with zero growth
+            click_count      = 0
+            max_attempts      = 300
+            no_growth_streak  = 0
+            max_no_growth     = 4
 
             prev_count = tab.locator('h2.line-clamp-3').count()
             print(f"    starting count: {prev_count}")
@@ -104,9 +115,6 @@ def scrape_category(url: str) -> set:
                 btn_present = load_more.count() > 0
 
                 if btn_present:
-                    # The button briefly disables itself while a batch is
-                    # loading. Wait it out instead of giving up — it can take
-                    # a few seconds for the next batch of cards to appear.
                     try:
                         load_more.first.wait_for(state="visible", timeout=2000)
                         is_enabled = load_more.first.is_enabled()
@@ -114,7 +122,8 @@ def scrape_category(url: str) -> set:
                         is_enabled = False
 
                     if not is_enabled:
-                        print(f"    'Load more' present but disabled (still loading) — waiting...")
+                        # Wait out the "still loading" disabled state rather
+                        # than giving up immediately.
                         try:
                             tab.wait_for_function(
                                 """
@@ -127,14 +136,11 @@ def scrape_category(url: str) -> set:
                                 timeout=8000
                             )
                         except Exception:
-                            pass  # still disabled after waiting — fall through to growth check below
+                            pass
 
-                        # Re-check after waiting
                         load_more = tab.get_by_role("button", name="Load more")
                         btn_present = load_more.count() > 0
                         is_enabled = btn_present and load_more.first.is_enabled()
-                    else:
-                        is_enabled = True
 
                     if btn_present and is_enabled:
                         try:
@@ -143,15 +149,13 @@ def scrape_category(url: str) -> set:
                         except Exception as e:
                             print(f"    [info] click attempt failed, will recheck count: {e}")
 
-                # Wait for either the button-click or a scroll-triggered
-                # load to actually add cards, rather than assuming the click worked.
                 try:
                     tab.wait_for_function(
                         f"document.querySelectorAll('h2.line-clamp-3').length > {prev_count}",
                         timeout=8000
                     )
                 except Exception:
-                    pass  # no growth this round, handled below
+                    pass
 
                 curr_count = tab.locator('h2.line-clamp-3').count()
 
@@ -163,8 +167,6 @@ def scrape_category(url: str) -> set:
                     no_growth_streak += 1
                     print(f"    no growth ({no_growth_streak}/{max_no_growth}) at {curr_count} cards")
 
-                # Stop conditions: button is truly gone from DOM with no growth,
-                # or growth has stalled for several attempts in a row.
                 still_has_button = tab.get_by_role("button", name="Load more").count() > 0
                 if not still_has_button and no_growth_streak >= 1:
                     print(f"    'Load more' button gone — fully loaded at {curr_count} cards")
@@ -173,23 +175,46 @@ def scrape_category(url: str) -> set:
                     print(f"    no growth for {max_no_growth} attempts — assuming fully loaded at {curr_count} cards")
                     break
 
-            # Let final batch settle
             tab.wait_for_timeout(1000)
 
-            soup   = BeautifulSoup(tab.content(), 'lxml')
-            names  = soup.select('h2.line-clamp-3')
-            prices = [
-                p for p in soup.find_all('p')
-                if sorted(p.get('class', [])) == sorted(PRICE_CLASS)
-            ]
+            soup = BeautifulSoup(tab.content(), 'lxml')
             browser.close()
 
-            for name_tag, price_tag in zip(names, prices):
-                name  = name_tag.get_text(strip=True)
-                price = price_tag.get_text(strip=True)
-                cards.add(f"{name}\n Price:{price}")
+            # FIX FOR PROBLEM 1: extract title+price from WITHIN each
+            # product's own <a href="/products/..."> link — never from two
+            # separately-queried lists matched by position. Each card's
+            # title and price are pulled from the same self-contained
+            # element, so they can never be mismatched with another card's.
+            product_links = [a for a in soup.find_all('a', href=True) if '/products/' in a['href']]
 
-            print(f"    → {len(cards)} cards scraped (after {click_count} 'Load more' clicks)")
+            seen_hrefs = set()
+            found = 0
+            for a in product_links:
+                href = a['href']
+                if href in seen_hrefs:
+                    continue  # same card can appear twice (image link + title link)
+
+                name_tag = a.find('h2')
+                if not name_tag:
+                    continue  # this <a> is the image-only link, skip it
+
+                seen_hrefs.add(href)
+                name = name_tag.get_text(strip=True)
+                if not name:
+                    continue
+
+                price_tag = next(
+                    (p for p in a.find_all('p') if sorted(p.get('class', [])) == sorted(PRICE_CLASS)),
+                    None
+                )
+                price = price_tag.get_text(strip=True) if price_tag else "UNKNOWN"
+
+                # Product URL is the unique key — names CAN collide
+                # (two listings of the same card), but the URL never does.
+                cards.add(f"{href}\n {name}\n Price:{price}")
+                found += 1
+
+            print(f"    matched {found} product cards from {len(product_links)} product links")
 
     except Exception as e:
         print(f"  [ERROR] scraping {url}: {e}")
@@ -205,20 +230,18 @@ def main():
     while True:
         print("\n─── Check cycle ───")
         try:
-            snapshot  = load_snapshot()
+            snapshot  = load_snapshot()   # { cat: { card: miss_count } }
             first_run = not bool(snapshot)
 
-            current       = {}
+            current       = {}   # { cat: set of cards seen THIS cycle }
             scrape_errors = []
 
             for cat, url in CATEGORIES.items():
                 result = scrape_category(url)
                 if not result and cat in snapshot:
-                    print(f"  [WARN] {cat}: 0 cards returned, keeping previous snapshot.")
+                    print(f"  [WARN] {cat}: 0 cards returned this scrape.")
                     scrape_errors.append(cat)
-                    current[cat] = snapshot[cat]
-                else:
-                    current[cat] = result
+                current[cat] = result  # may be empty; handled below via miss-counting
 
             if len(scrape_errors) == len(CATEGORIES):
                 print("[ERROR] Every category failed. Pausing briefly before retry.")
@@ -227,17 +250,49 @@ def main():
 
             if first_run:
                 print("First run — saving initial snapshot, no email sent.")
-                save_snapshot(current)
+                initial = {cat: {card: 0 for card in cards} for cat, cards in current.items()}
+                save_snapshot(initial)
                 time.sleep(LOOP_PAUSE)
                 continue
 
-            # Detect new cards
-            additions = {}
-            for cat, cur_set in current.items():
-                prev_set  = snapshot.get(cat, set())
-                new_cards = cur_set - prev_set
-                if new_cards:
-                    additions[cat] = sorted(new_cards)
+            # ── FIX FOR PROBLEM 2: miss-count based removal ─────────────────
+            # A card is only dropped from tracking after MISS_THRESHOLD
+            # consecutive cycles of not being seen — a single bad/incomplete
+            # scrape can no longer make a card vanish and "reappear as new".
+            new_snapshot = {}
+            additions    = {}
+            removals     = {}
+
+            for cat in CATEGORIES:
+                prev_cards = snapshot.get(cat, {})   # { card: miss_count }
+                seen_now   = current.get(cat, set())
+
+                updated = {}
+                cat_additions = []
+                cat_removals  = []
+
+                # Cards seen this cycle: reset their miss-count to 0.
+                for card in seen_now:
+                    if card not in prev_cards:
+                        cat_additions.append(card)   # genuinely new
+                    updated[card] = 0
+
+                # Cards NOT seen this cycle: increment miss-count, keep
+                # tracking them unless they've now exceeded the threshold.
+                for card, miss_count in prev_cards.items():
+                    if card in seen_now:
+                        continue  # already handled above
+                    new_miss = miss_count + 1
+                    if new_miss >= MISS_THRESHOLD:
+                        cat_removals.append(card)    # now considered sold
+                    else:
+                        updated[card] = new_miss     # still within grace period
+
+                new_snapshot[cat] = updated
+                if cat_additions:
+                    additions[cat] = sorted(cat_additions)
+                if cat_removals:
+                    removals[cat] = sorted(cat_removals)
 
             if additions:
                 body = "New Cards Posted on CardsHQ\n\n"
@@ -247,11 +302,15 @@ def main():
                         body += f"  - {card}\n"
                     body += "\n"
                 print("New cards found — sending email:\n", body)
-                # send_email(subject='🃏 New Cards Posted on CardsHQ', body=body)
+                send_email(subject='🃏 New Cards Posted on CardsHQ', body=body)
             else:
                 print("No new cards.")
 
-            save_snapshot(current)
+            if removals:
+                for cat, cards in removals.items():
+                    print(f"  [{cat}] {len(cards)} card(s) sold/removed after {MISS_THRESHOLD} consecutive misses")
+
+            save_snapshot(new_snapshot)
 
         except Exception as e:
             print(f"[ERROR] cycle failed: {e}")
