@@ -247,7 +247,7 @@ def main():
                         body += f"  - {card}\n"
                     body += "\n"
                 print("New cards found — sending email:\n", body)
-                send_email(subject='🃏 New Cards Posted on CardsHQ', body=body)
+                # send_email(subject='🃏 New Cards Posted on CardsHQ', body=body)
             else:
                 print("No new cards.")
 
