@@ -140,15 +140,22 @@ def main():
             first_run = not bool(snapshot)
 
             current: dict = {}
+            scrape_errors: list = []
             for cat, url in CATEGORIES.items():
                 result = scrape_category(url)
-                # If scrape returned nothing (error or empty page), keep the
-                # previous snapshot for that category so we don't false-alert.
                 if not result and cat in snapshot:
                     print(f"  [WARN] {cat}: scrape returned 0 cards; keeping previous snapshot.")
+                    scrape_errors.append(cat)
                     current[cat] = snapshot[cat]
                 else:
                     current[cat] = result
+
+            # If ALL categories failed, something is systemically wrong — skip
+            # this cycle entirely rather than emailing garbage or saving bad state.
+            if len(scrape_errors) == len(CATEGORIES):
+                print("[ERROR] Every category failed to scrape. Skipping cycle, snapshot unchanged.")
+                time.sleep(CHECK_INTERVAL)
+                continue
 
             if first_run:
                 print("First run — saving initial snapshot, no email sent.")
