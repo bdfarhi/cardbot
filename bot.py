@@ -760,10 +760,10 @@ def main():
                 print(body)
 
 
-                send_email(
-                    "🃏 New Cards Added to CardsHQ",
-                    body
-                )
+                # send_email(
+                #     "🃏 New Cards Added to CardsHQ",
+                #     body
+                # )
 
 
             else:
