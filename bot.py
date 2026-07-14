@@ -452,7 +452,17 @@ def parse_rsc_response(text, debug=False):
 
         if not isinstance(title, str) or not title:
             continue
-        if not product_id:
+        if not isinstance(product_id, str) or not product_id:
+            continue
+
+        # Variants (e.g. "Default Title") and options also have their
+        # own title/id/price-shaped fields and would otherwise pass
+        # every check below. Only accept true Product nodes.
+        if "/Product/" not in product_id:
+            continue
+        if "ProductVariant" in product_id or "ProductOption" in product_id:
+            continue
+        if "handle" not in obj:
             continue
 
         price = find_price(obj)
