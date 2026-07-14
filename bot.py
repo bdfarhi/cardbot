@@ -305,9 +305,29 @@ def get_flight_text(html):
     return "".join(pieces)
 
 
-def extract_json_objects(text):
+def collect_dicts(value, found):
+    """Recursively walk a parsed JSON value and collect every dict
+    found anywhere inside it (not just the top-level one)."""
+    if isinstance(value, dict):
+        found.append(value)
+        for v in value.values():
+            collect_dicts(v, found)
+    elif isinstance(value, list):
+        for item in value:
+            collect_dicts(item, found)
 
-    objects = []
+
+def extract_json_objects(text):
+    """
+    Scan text for balanced {...} spans and parse them. Previously this
+    stopped at the first successful top-level match and skipped past
+    it - but a successful match is often a large wrapper object (e.g.
+    Next.js props containing "initialProducts": [...]) whose real
+    product dicts are nested *inside* it. So once a span parses, we
+    recursively walk the resulting object to pull out every nested
+    dict too.
+    """
+    all_dicts = []
     i = 0
     n = len(text)
 
@@ -315,47 +335,21 @@ def extract_json_objects(text):
 
         if text[i] == '{':
 
-            depth = 0
-            in_string = False
-            escape = False
-            j = i
+            end = extract_balanced(text, i, '{', '}')
 
-            while j < n:
-                c = text[j]
-
-                if in_string:
-                    if escape:
-                        escape = False
-                    elif c == '\\':
-                        escape = True
-                    elif c == '"':
-                        in_string = False
-                else:
-                    if c == '"':
-                        in_string = True
-                    elif c == '{':
-                        depth += 1
-                    elif c == '}':
-                        depth -= 1
-                        if depth == 0:
-                            j += 1
-                            break
-
-                j += 1
-
-            candidate = text[i:j]
-
-            try:
-                obj = json.loads(candidate)
-                objects.append(obj)
-                i = j
-                continue
-            except (json.JSONDecodeError, ValueError):
-                pass
+            if end != -1:
+                candidate = text[i:end]
+                try:
+                    obj = json.loads(candidate)
+                    collect_dicts(obj, all_dicts)
+                    i = end
+                    continue
+                except (json.JSONDecodeError, ValueError):
+                    pass
 
         i += 1
 
-    return objects
+    return all_dicts
 
 
 def find_price(obj):
