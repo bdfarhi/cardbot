@@ -501,10 +501,10 @@ def detect_new_cards(current):
 def main():
  
     print("CardsHQ Bot Started")
-    if os.getenv("RESET_INVENTORY") == "true":
-        if os.path.exists(SEEN_FILE):
-            os.remove(SEEN_FILE)
-            print("Seen inventory reset via RESET_INVENTORY env var")
+    # if os.getenv("RESET_INVENTORY") == "true":
+    #     if os.path.exists(SEEN_FILE):
+    #         os.remove(SEEN_FILE)
+    #         print("Seen inventory reset via RESET_INVENTORY env var")
  
     while True:
  
