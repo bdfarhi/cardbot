@@ -227,6 +227,84 @@ def build_headers(category, session_data):
 # is ever considered a match, so title/id/price always come from the
 # same node.
 
+def extract_balanced(text, start, open_ch='[', close_ch=']'):
+    """
+    Return the index just past the balanced open/close span starting
+    at text[start] == open_ch, respecting quoted strings so brackets
+    inside string literals don't confuse the depth count.
+    """
+    depth = 0
+    in_string = False
+    escape = False
+    i = start
+    n = len(text)
+
+    while i < n:
+        c = text[i]
+
+        if in_string:
+            if escape:
+                escape = False
+            elif c == '\\':
+                escape = True
+            elif c == '"':
+                in_string = False
+        else:
+            if c == '"':
+                in_string = True
+            elif c == open_ch:
+                depth += 1
+            elif c == close_ch:
+                depth -= 1
+                if depth == 0:
+                    return i + 1
+
+        i += 1
+
+    return -1
+
+
+def get_flight_text(html):
+    """
+    Reconstruct the full Next.js flight payload text properly.
+
+    Each self.__next_f.push([...]) call's argument is itself valid
+    JSON: [<index>, "<escaped string chunk>"]. Previously we grabbed
+    the raw text between "push([" and "])" and glued chunks together
+    with "\\n".join(), then ran a single unicode_escape decode over
+    the whole blob. That decode has no concept of chunk boundaries or
+    which quotes are wrapper syntax vs. real content, so it corrupts
+    quote boundaries as soon as chunks are concatenated (visible in
+    debug output as a stray lone '"' between chunks).
+
+    Instead: parse each push() argument as real JSON so escapes are
+    resolved unambiguously per chunk, then concatenate the *decoded*
+    string pieces (not the raw wrapper text).
+    """
+    pieces = []
+
+    for m in re.finditer(r'self\.__next_f\.push\(', html):
+        start = m.end()
+
+        if start >= len(html) or html[start] != '[':
+            continue
+
+        end = extract_balanced(html, start, '[', ']')
+        if end == -1:
+            continue
+
+        try:
+            parsed = json.loads(html[start:end])
+        except (json.JSONDecodeError, ValueError):
+            continue
+
+        for item in parsed:
+            if isinstance(item, str):
+                pieces.append(item)
+
+    return "".join(pieces)
+
+
 def extract_json_objects(text):
 
     objects = []
@@ -315,27 +393,21 @@ def parse_rsc_response(text, debug=False):
 
     products = []
 
-    chunks = re.findall(r'self\.__next_f\.push\(\[(.*?)\]\)', text, re.DOTALL)
+    combined = get_flight_text(text)
 
-    if not chunks:
+    if not combined:
         print("No flight chunks found")
         return {"products": [], "hasNextPage": False, "endCursor": None}
 
-    combined = "\n".join(chunks)
-
-    try:
-        combined = combined.encode("utf-8").decode("unicode_escape")
-    except UnicodeDecodeError:
-        pass
-
     if debug:
+        print("RECONSTRUCTED FLIGHT TEXT LENGTH:", len(combined))
         # Show raw text around the first few literal occurrences of
         # "title" so we can see the ACTUAL shape of a product node
         # instead of guessing. This is the key diagnostic - paste
         # this output back so the parser can be calibrated correctly.
         idx = 0
         shown = 0
-        while shown < 3:
+        while shown < 8:
             idx = combined.find('"title"', idx)
             if idx == -1:
                 break
@@ -347,10 +419,18 @@ def parse_rsc_response(text, debug=False):
             shown += 1
 
         if shown == 0:
-            print('\nNO LITERAL "title" KEY FOUND IN DECODED TEXT AT ALL')
-            # look for it without decoding, in case decode broke it
-            if '"title"' in "\n".join(chunks):
-                print('...but it IS present before unicode_escape decoding - the decode step is corrupting it')
+            print('\nNO LITERAL "title" KEY FOUND IN RECONSTRUCTED TEXT AT ALL')
+
+        # specifically locate a real product node via priceRange, since
+        # the plain "title" occurrences above are mostly page metadata
+        price_idx = combined.find('"priceRange"')
+        if price_idx != -1:
+            start = max(0, price_idx - 300)
+            end = min(len(combined), price_idx + 300)
+            print("\n--- RAW SAMPLE AROUND 'priceRange' ---")
+            print(combined[start:end])
+        else:
+            print('\nNO LITERAL "priceRange" KEY FOUND - product price field may use a different name')
 
     all_objs = extract_json_objects(combined)
 
