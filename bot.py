@@ -547,7 +547,7 @@ def scrape_category(category):
             print(response.text[:500])
             break
 
-        data = parse_rsc_response(response.text, debug=True)
+        data = parse_rsc_response(response.text, debug=False)
         batch = data["products"]
 
         print("FOUND", len(batch), "cards")
@@ -645,10 +645,10 @@ def main():
 
                 print(body)
 
-                # send_email(
-                #     "🃏 New Cards Added to CardsHQ",
-                #     body
-                # )
+                send_email(
+                    "🃏 New Cards Added to CardsHQ",
+                    body
+                )
 
             else:
                 print("No new cards")
