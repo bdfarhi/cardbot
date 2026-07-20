@@ -1,4 +1,5 @@
 import os
+import sys
 import json
 import time
 import requests
@@ -6,6 +7,18 @@ import smtplib
 
 from dotenv import load_dotenv
 from email.mime.text import MIMEText
+
+
+# Force real-time log output regardless of whether PYTHONUNBUFFERED or
+# `python -u` made it into the actual deploy config. reconfigure() is
+# available on Python 3.7+ and makes stdout flush after every newline,
+# so "Sleeping 5 minutes..." (and everything else) shows up in Render's
+# logs immediately instead of sitting in a buffer until it happens to
+# fill up.
+try:
+    sys.stdout.reconfigure(line_buffering=True)
+except Exception:
+    pass
 
 
 # ============================================================
@@ -121,8 +134,19 @@ def fetch_collection_products(category, debug=False):
 
     products = []
     page = 1
+    seen_ids_this_fetch = set()
+
+    # Hard ceiling as a last-resort circuit breaker. 200 pages * 250 =
+    # 50,000 products, far beyond anything this catalog could
+    # plausibly hold - if we ever hit this, pagination is broken, not
+    # the catalog actually being that big.
+    MAX_PAGES = 200
 
     while True:
+
+        if page > MAX_PAGES:
+            print(f"  hit MAX_PAGES ({MAX_PAGES}) - stopping, pagination is likely stuck")
+            break
 
         url = PRODUCTS_JSON_URL.format(category)
 
@@ -130,10 +154,10 @@ def fetch_collection_products(category, debug=False):
             url,
             params={"limit": PAGE_LIMIT, "page": page},
             headers={"User-Agent": "Mozilla/5.0"},
-            timeout=30
+            timeout=(10, 30)   # (connect timeout, read timeout) in seconds
         )
 
-        print(f"  page {page} -> status {response.status_code}")
+        print(f"  page {page} -> status {response.status_code}", flush=True)
 
         if response.status_code != 200:
             print("  request failed:", response.text[:300])
@@ -153,6 +177,16 @@ def fetch_collection_products(category, debug=False):
 
         if not batch:
             break
+
+        # Safety net: if this page's product ids are all ones we
+        # already collected earlier in this same fetch, the ?page=
+        # param isn't actually advancing (e.g. CDN serving a cached
+        # page 1 for every page number) - stop instead of looping.
+        batch_ids = {p.get("id") for p in batch}
+        if batch_ids and batch_ids.issubset(seen_ids_this_fetch):
+            print(f"  page {page} returned only already-seen ids - pagination isn't advancing, stopping")
+            break
+        seen_ids_this_fetch |= batch_ids
 
         for p in batch:
             variants = p.get("variants") or []
@@ -194,9 +228,9 @@ def scrape_all_categories(debug=False):
     inventory = {}
 
     for category in CATEGORIES:
-        print("\nScanning", category)
+        print("\nScanning", category, flush=True)
         inventory[category] = fetch_collection_products(category, debug=debug)
-        print(category, len(inventory[category]), "products")
+        print(category, len(inventory[category]), "products", flush=True)
 
     return inventory
 
@@ -278,7 +312,7 @@ def main():
         except Exception as e:
             print("BOT ERROR:", e)
 
-        print("Sleeping 5 minutes...")
+        print("Sleeping 5 minutes...", flush=True)
         time.sleep(LOOP_PAUSE)
 
 
