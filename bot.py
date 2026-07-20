@@ -57,7 +57,7 @@ CATEGORIES = {
 #     list, capped at 250 per page, and you page through it with
 #     ?page=N until you get an empty page back.
 
-PRODUCTS_JSON_URL = "https://www.cardshq.com/collections/{}/products.json"
+PRODUCTS_JSON_URL = "https://cardshq.myshopify.com/collections/{}/products.json"
 
 PAGE_LIMIT = 250
 
@@ -156,8 +156,17 @@ def fetch_collection_products(category, debug=False):
 
         for p in batch:
             variants = p.get("variants") or []
-            price = variants[0].get("price") if variants else None
 
+            # products.json returns everything ever published, including
+            # sold-out items (variant "available": false). Only count
+            # what a shopper could actually buy right now, so a sellout
+            # doesn't get mixed up with a genuinely new listing.
+            in_stock_variants = [v for v in variants if v.get("available")]
+
+            if not in_stock_variants:
+                continue
+
+            price = in_stock_variants[0].get("price")
             product_id = p.get("id")
             title = p.get("title")
 
@@ -272,9 +281,6 @@ def main():
         print("Sleeping 5 minutes...")
         time.sleep(LOOP_PAUSE)
 
-
-if __name__ == "__main__":
-    main()
 
 if __name__ == "__main__":
     main()
