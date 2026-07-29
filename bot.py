@@ -152,7 +152,24 @@ def fetch_collection_products(category, debug=False):
 
         response = session.get(
             url,
-            params={"limit": PAGE_LIMIT, "page": page},
+            params={
+                "limit": PAGE_LIMIT,
+                "page": page,
+                # Pin a stable, monotonically-increasing sort. Without
+                # this, products.json mirrors whatever sort the
+                # collection is configured with in the admin (often
+                # "best selling" or manual/featured order) - and that
+                # can shift in near-real-time. Since we fetch pages
+                # sequentially as separate requests, any reordering
+                # between those requests causes items to drift between
+                # page "windows": the same product can land on two
+                # different pages (inflating the count), or a
+                # long-since-seen product can drift into a page window
+                # we hadn't captured before, looking "new" even though
+                # nothing on the site actually changed. created-ascending
+                # is a fixed field per product and won't reshuffle.
+                "sort_by": "created-ascending"
+            },
             headers={"User-Agent": "Mozilla/5.0"},
             timeout=(10, 30)   # (connect timeout, read timeout) in seconds
         )
@@ -220,7 +237,15 @@ def fetch_collection_products(category, debug=False):
         page += 1
         time.sleep(0.5)
 
-    return products
+    # Safety net: even with a pinned sort, dedupe by id across the
+    # whole fetch. If pages still overlap for any reason, this keeps
+    # the reported count and downstream "new card" detection accurate
+    # rather than inflated by the same product appearing twice.
+    deduped = {}
+    for p in products:
+        deduped[p["id"]] = p
+
+    return list(deduped.values())
 
 
 def scrape_all_categories(debug=False):
@@ -315,10 +340,10 @@ def main():
 
                 print(body)
 
-                # send_email(
-                #     "🃏 New Cards Added to CardsHQ",
-                #     body
-                # )
+                send_email(
+                    "🃏 New Cards Added to CardsHQ",
+                    body
+                )
 
             else:
                 print("No new cards")
